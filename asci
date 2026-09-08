@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pizza Şefi</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #fdf6ec;
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      user-select: none;
+    }
+    .header {
+      display: flex;
+      gap: 30px;
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: #333;
+      margin-bottom: 10px;
+    }
+    #customer-box {
+      background: #fff;
+      padding: 12px 24px;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+      text-align: center;
+      font-size: 1.1rem;
+      margin-bottom: 15px;
+      min-height: 50px;
+    }
+    #customer-feedback {
+      font-weight: bold;
+      margin-top: 5px;
+      transition: all 0.2s;
+    }
+    #kitchen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 15px;
+    }
+    #pizza-base {
+      width: 240px;
+      height: 240px;
+      background: #e6a756;
+      border-radius: 50%;
+      border: 8px solid #c97d26;
+      position: relative;
+      box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+      overflow: hidden;
+      cursor: default;
+    }
+    #sauce-layer {
+      position: absolute;
+      inset: 12px;
+      background: transparent;
+      border-radius: 50%;
+      transition: background 0.3s;
+    }
+    #cheese-layer {
+      position: absolute;
+      inset: 18px;
+      background: transparent;
+      border-radius: 50%;
+      transition: background 0.3s;
+    }
+    .topping {
+      position: absolute;
+      font-size: 24px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: center;
+      max-width: 420px;
+    }
+    button {
+      padding: 10px 16px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      background: #fff;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+      transition: transform 0.1s, background 0.2s;
+    }
+    button:active { transform: scale(0.95); }
+    button.primary { background: #4caf50; color: white; }
+    button.danger { background: #f44336; color: white; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div>Kasa: <span id="money">0</span> ₺</div>
+    <div>Mutlu Müşteri: <span id="happy-count">0</span></div>
+  </div>
+
+  <div id="customer-box">
+    <div id="customer-order">Sipariş yükleniyor...</div>
+    <div id="customer-feedback"></div>
+  </div>
+
+  <div id="kitchen">
+    <div id="pizza-base">
+      <div id="sauce-layer"></div>
+      <div id="cheese-layer"></div>
+    </div>
+
+    <div class="controls">
+      <button onclick="addBase('sauce')">🍅 Domates Sosu</button>
+      <button onclick="addBase('cheese')">🧀 Peynir</button>
+      <button onclick="addTopping('🍄', 'mantar')">🍄 Mantar</button>
+      <button onclick="addTopping('🥩', 'sucuk')">🥩 Sucuk</button>
+      <button onclick="addTopping('🫒', 'zeytin')">🫒 Zeytin</button>
+      <button onclick="addTopping('🌽', 'misir')">🌽 Mısır</button>
+    </div>
+
+    <div class="controls">
+      <button class="danger" onclick="clearPizza()">Temizle</button>
+      <button class="primary" onclick="servePizza()">Müşteriye Sun 🍕</button>
+    </div>
+  </div>
+
+  <script>
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playTone(freq, duration, type = 'sine') {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.setValueAtTime(0.12, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    }
+
+    function soundSuccess() {
+      playTone(440, 0.1);
+      setTimeout(() => playTone(660, 0.15), 100);
+      setTimeout(() => playTone(880, 0.25), 220);
+    }
+
+    function soundFail() {
+      playTone(180, 0.15, 'sawtooth');
+      setTimeout(() => playTone(120, 0.25, 'sawtooth'), 150);
+    }
+
+    function soundTap() {
+      playTone(500, 0.05);
+    }
+
+    const recipes = [
+      {
+        name: "Margarita Pizza",
+        desc: "Sadece sos ve bol peynir!",
+        req: { sauce: true, cheese: true, mantar: false, sucuk: false, zeytin: false, misir: false },
+        price: 90
+      },
+      {
+        name: "Sucuklu Klasik",
+        desc: "Sos, peynir ve bol sucuk.",
+        req: { sauce: true, cheese: true, mantar: false, sucuk: true, zeytin: false, misir: false },
+        price: 120
+      },
+      {
+        name: "Vejetaryen Pizza",
+        desc: "Sos, peynir, mantar, zeytin ve mısır (et olmasın).",
+        req: { sauce: true, cheese: true, mantar: true, sucuk: false, zeytin: true, misir: true },
+        price: 110
+      },
+      {
+        name: "Karışık Süper Pizza",
+        desc: "Sos, peynir, sucuk, mantar, zeytin ve mısır. Hepsinden olsun!",
+        req: { sauce: true, cheese: true, mantar: true, sucuk: true, zeytin: true, misir: true },
+        price: 140
+      }
+    ];
+
+    let currentOrder = null;
+    let money = 0;
+    let happyCount = 0;
+
+    let currentPizza = {
+      sauce: false,
+      cheese: false,
+      mantar: false,
+      sucuk: false,
+      zeytin: false,
+      misir: false
+    };
+
+    function newCustomer() {
+      currentOrder = recipes[Math.floor(Math.random() * recipes.length)];
+      document.getElementById('customer-order').innerHTML = `
+        <strong>Müşteri:</strong> "${currentOrder.name} istiyorum!" <br>
+        <span style="font-size: 0.9rem; color: #666;">(${currentOrder.desc})</span>
+      `;
+      document.getElementById('customer-feedback').innerText = '';
+    }
+
+    function addBase(type) {
+      soundTap();
+      if (type === 'sauce') {
+        currentPizza.sauce = true;
+        document.getElementById('sauce-layer').style.background = '#d32f2f';
+      }
+      if (type === 'cheese') {
+        currentPizza.cheese = true;
+        document.getElementById('cheese-layer').style.background = '#fbc02d';
+      }
+    }
+
+    function addTopping(emoji, name) {
+      soundTap();
+      currentPizza[name] = true;
+      const pizza = document.getElementById('pizza-base');
+      
+      // 3 farklı rastgele konuma ekle
+      for (let i = 0; i < 3; i++) {
+        const span = document.createElement('span');
+        span.className = 'topping';
+        span.innerText = emoji;
+        const angle = Math.random() * Math.PI * 2;
+        const r = Math.random() * 70;
+        span.style.left = (120 + r * Math.cos(angle)) + 'px';
+        span.style.top = (120 + r * Math.sin(angle)) + 'px';
+        pizza.appendChild(span);
+      }
+    }
+
+    function clearPizza() {
+      soundTap();
+      currentPizza = { sauce: false, cheese: false, mantar: false, sucuk: false, zeytin: false, misir: false };
+      document.getElementById('sauce-layer').style.background = 'transparent';
+      document.getElementById('cheese-layer').style.background = 'transparent';
+      const toppings = document.querySelectorAll('.topping');
+      toppings.forEach(t => t.remove());
+    }
+
+    function servePizza() {
+      const keys = ['sauce', 'cheese', 'mantar', 'sucuk', 'zeytin', 'misir'];
+      let correct = true;
+
+      for (let key of keys) {
+        if (currentPizza[key] !== currentOrder.req[key]) {
+          correct = false;
+          break;
+        }
+      }
+
+      const feedback = document.getElementById('customer-feedback');
+      if (correct) {
+        soundSuccess();
+        money += currentOrder.price;
+        happyCount++;
+        document.getElementById('money').innerText = money;
+        document.getElementById('happy-count').innerText = happyCount;
+        feedback.style.color = '#2e7d32';
+        feedback.innerText = `😋 Harika olmuş! Tam istediğim gibi. (+${currentOrder.price} ₺)`;
+      } else {
+        soundFail();
+        feedback.style.color = '#c62828';
+        feedback.innerText = '😡 Bu benim istediğim pizza değil! Malzemeler hatalı.';
+      }
+
+      setTimeout(() => {
+        clearPizza();
+        newCustomer();
+      }, 1800);
+    }
+
+    newCustomer();
+  </script>
+</body>
+</html>
